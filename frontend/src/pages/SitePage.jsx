@@ -131,7 +131,13 @@ export default function SitePage({ siteId }) {
 
       <section className="panel">
         <h2>Таймлайн</h2>
-        <TimelineTable timeline={timeline} onSelectDay={(d) => setSelectedDay(d)} />
+        <TimelineTable
+          timeline={timeline}
+          onSelectDay={(d) => setSelectedDay(d)}
+          onOpenPhoto={(id) => {
+            window.location.hash = `#/photo/${id}`;
+          }}
+        />
       </section>
 
       {selectedDay && (

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Set
 
 from backend.domain.stages import (
@@ -224,6 +224,7 @@ def build_timeline(
     plan_rows: List[Dict[str, Any]],
     photos: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
+    """Только даты, на которые есть снимки (не каждый день плана)."""
     by_day: Dict[str, Dict[str, Any]] = {}
 
     for photo in photos:
@@ -233,17 +234,6 @@ def build_timeline(
         bucket = by_day.setdefault(day, {"photo_ids": [], "detections": []})
         bucket["photo_ids"].append(photo["id"])
         bucket["detections"].extend(photo.get("detections") or [])
-
-    for row in plan_rows:
-        start = _as_date(row["date_from"])
-        end = _as_date(row["date_to"])
-        cur = start
-        # ограничиваем разворот плана (защита от огромных CSV)
-        guard = 0
-        while cur <= end and guard < 400:
-            by_day.setdefault(cur.isoformat(), {"photo_ids": [], "detections": []})
-            cur = cur + timedelta(days=1)
-            guard += 1
 
     reports: List[Dict[str, Any]] = []
     for day in sorted(by_day.keys()):

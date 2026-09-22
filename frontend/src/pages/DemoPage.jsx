@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { runDemoAnalyze } from "../api.js";
-import { DeviationList, TimelineTable, StatusBadge } from "../components/Shared.jsx";
+import { DeviationList, TimelineTable } from "../components/Shared.jsx";
 
 function addDays(iso, n) {
   const d = new Date(iso + "T12:00:00");
@@ -17,7 +17,6 @@ export default function DemoPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
-  const [selectedDay, setSelectedDay] = useState(null);
 
   const dates = useMemo(() => {
     return photoFiles.map((_, i) => addDays(baseDate, i * Number(stepDays || 1)));
@@ -49,7 +48,6 @@ export default function DemoPage() {
         siteName,
       });
       setResult(data);
-      setSelectedDay(data.timeline?.find((d) => d.deviations?.length) || data.timeline?.[0] || null);
     } catch (e) {
       setError(e.message || String(e));
     } finally {
@@ -175,58 +173,13 @@ export default function DemoPage() {
           </section>
 
           <section className="panel">
-            <h2>Таймлайн план / факт</h2>
-            <TimelineTable timeline={result.timeline} onSelectDay={setSelectedDay} />
+            <h2>Разбор по снимкам</h2>
+            <p className="hint">
+              Строка = дата кадра. «Открыть снимок» — детекции ML и вывод алгоритма на эту
+              дату.
+            </p>
+            <TimelineTable timeline={result.timeline} />
           </section>
-
-          {selectedDay && (
-            <section className="panel day-detail">
-              <div className="panel-head">
-                <h2>День {selectedDay.date}</h2>
-                <StatusBadge status={selectedDay.plan_status} />
-              </div>
-              <dl className="kv">
-                <div>
-                  <dt>План</dt>
-                  <dd>
-                    {selectedDay.planned_stages?.length
-                      ? selectedDay.planned_stages
-                          .map((s) => `${s.stage_label}${s.zone ? ` (${s.zone})` : ""}`)
-                          .join("; ")
-                      : "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Факт (этап)</dt>
-                  <dd>{selectedDay.primary_stage_label || "техника не распознана / нет маркера"}</dd>
-                </div>
-                <div>
-                  <dt>Техника на снимках</dt>
-                  <dd className="mono">
-                    {Object.entries(selectedDay.counts || {})
-                      .map(([k, v]) => `${k}:${v}`)
-                      .join(" ") || "—"}
-                  </dd>
-                </div>
-              </dl>
-              <DeviationList
-                deviations={(selectedDay.deviations || []).map((d) => ({
-                  ...d,
-                  date: selectedDay.date,
-                }))}
-              />
-              {selectedDay.photo_ids?.length > 0 && (
-                <div className="photo-links">
-                  <h3>Подтверждающие снимки</h3>
-                  {selectedDay.photo_ids.map((id) => (
-                    <a key={id} className="btn ghost sm" href={`#/photo/${id}`}>
-                      Открыть снимок {id.slice(0, 8)}…
-                    </a>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
 
           <section className="panel">
             <h2>Методика «этап → техника»</h2>

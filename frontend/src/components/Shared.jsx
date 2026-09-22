@@ -87,15 +87,15 @@ function typeLabel(t) {
   return m[t] || t;
 }
 
-export function TimelineTable({ timeline, onSelectDay }) {
-  if (!timeline?.length) return <p className="muted">Таймлайн пуст</p>;
+export function TimelineTable({ timeline, onSelectDay, onOpenPhoto }) {
+  if (!timeline?.length) return <p className="muted">Нет снимков с датами для анализа</p>;
   return (
     <div className="table-wrap">
       <table className="data-table">
         <thead>
           <tr>
-            <th>Дата</th>
-            <th>План</th>
+            <th>Дата снимка</th>
+            <th>План на дату</th>
             <th>Факт (этап)</th>
             <th>Статус</th>
             <th>Откл.</th>
@@ -103,30 +103,46 @@ export function TimelineTable({ timeline, onSelectDay }) {
           </tr>
         </thead>
         <tbody>
-          {timeline.map((day) => (
-            <tr key={day.date}>
-              <td className="mono">{day.date}</td>
-              <td>
-                {day.planned_stages?.length
-                  ? day.planned_stages.map((s) => s.stage_label).join(", ")
-                  : "—"}
-              </td>
-              <td>{day.primary_stage_label || "—"}</td>
-              <td>
-                <StatusBadge status={day.project_status || day.plan_status} />
-              </td>
-              <td>{day.deviations?.length || 0}</td>
-              <td>
-                <button
-                  type="button"
-                  className="btn ghost sm"
-                  onClick={() => onSelectDay?.(day)}
-                >
-                  Открыть
-                </button>
-              </td>
-            </tr>
-          ))}
+          {timeline.map((day) => {
+            const photoId = day.photo_ids?.[0];
+            return (
+              <tr key={day.date}>
+                <td className="mono">{day.date}</td>
+                <td>
+                  {day.planned_stages?.length
+                    ? day.planned_stages.map((s) => s.stage_label).join(", ")
+                    : "—"}
+                </td>
+                <td>{day.primary_stage_label || "—"}</td>
+                <td>
+                  <StatusBadge status={day.project_status || day.plan_status} />
+                </td>
+                <td>{day.deviations?.length || 0}</td>
+                <td>
+                  <button
+                    type="button"
+                    className="btn ghost sm"
+                    title={
+                      photoId
+                        ? "Открыть снимок: детекции ML и вывод алгоритма на эту дату"
+                        : "Показать разбор по дате"
+                    }
+                    onClick={() => {
+                      if (photoId && onOpenPhoto) {
+                        onOpenPhoto(photoId, day);
+                      } else if (photoId) {
+                        window.location.hash = `#/photo/${photoId}`;
+                      } else {
+                        onSelectDay?.(day);
+                      }
+                    }}
+                  >
+                    Открыть снимок
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
