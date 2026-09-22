@@ -1,0 +1,20 @@
+{
+  "source": "data/train_12/train/images/jsp_0000108_jpg.rf.fa7995f419efa6c5d1d83a58bdacab08.jpg",
+  "width": 1200,
+  "height": 900,
+  "counts": {
+    "truck": 1
+  },
+  "detections": [
+    {
+      "class": "truck",
+      "confidence": 0.9,
+      "bbox": [
+        505.9,
+        117.3,
+        860.4,
+        607.3
+      ]
+    }
+  ]
+}

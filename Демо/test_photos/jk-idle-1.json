@@ -1,0 +1,91 @@
+{
+  "source": "data/train_12/train/images/ta_hf_01151.jpg",
+  "width": 640,
+  "height": 640,
+  "counts": {
+    "excavator": 1,
+    "loader": 7
+  },
+  "detections": [
+    {
+      "class": "excavator",
+      "confidence": 0.9,
+      "bbox": [
+        570.0,
+        278.0,
+        639.5,
+        373.0
+      ]
+    },
+    {
+      "class": "loader",
+      "confidence": 0.9,
+      "bbox": [
+        481.0,
+        312.0,
+        541.5,
+        376.0
+      ]
+    },
+    {
+      "class": "loader",
+      "confidence": 0.9,
+      "bbox": [
+        237.0,
+        321.0,
+        264.5,
+        378.0
+      ]
+    },
+    {
+      "class": "loader",
+      "confidence": 0.9,
+      "bbox": [
+        185.0,
+        319.0,
+        221.5,
+        381.0
+      ]
+    },
+    {
+      "class": "loader",
+      "confidence": 0.9,
+      "bbox": [
+        142.0,
+        315.0,
+        183.0,
+        380.0
+      ]
+    },
+    {
+      "class": "loader",
+      "confidence": 0.9,
+      "bbox": [
+        99.0,
+        319.0,
+        136.5,
+        381.0
+      ]
+    },
+    {
+      "class": "loader",
+      "confidence": 0.9,
+      "bbox": [
+        52.0,
+        315.0,
+        90.0,
+        387.0
+      ]
+    },
+    {
+      "class": "loader",
+      "confidence": 0.9,
+      "bbox": [
+        0.0,
+        311.0,
+        42.0,
+        386.5
+      ]
+    }
+  ]
+}

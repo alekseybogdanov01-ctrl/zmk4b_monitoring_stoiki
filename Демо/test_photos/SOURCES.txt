@@ -1,0 +1,9 @@
+site_id	source	classes
+jk-idle-1	ta_hf_01151.jpg	{'excavator': 1, 'loader': 7}
+jk-idle-2	ta_jspark_00297.jpg	{'concrete_pump': 1}
+jk-warn-1	jsp_0000092_jpg.rf.61610c2822b833cf802e847073b065b4.jpg	{'truck': 4}
+jk-warn-2	jsp_0000108_jpg.rf.fa7995f419efa6c5d1d83a58bdacab08.jpg	{'truck': 1}
+jk-ok-1	ta_hf_00371.jpg	{'excavator': 1, 'dump_truck': 1}
+jk-ok-2	jsp_0002075_jpg.rf.c6d9032b98b516b215d5fcaca01a2ac1.jpg	{'tower_crane': 1}
+jk-info-1	jsp_0003562_jpg.rf.8e4722dae5169cfa03ab8344c77a59fc.jpg	{'tower_crane': 2}
+jk-info-2	ta_jspark_00244.jpg	{'concrete_pump': 1}

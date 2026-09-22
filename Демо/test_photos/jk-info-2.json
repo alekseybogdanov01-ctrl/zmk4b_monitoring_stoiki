@@ -1,0 +1,20 @@
+{
+  "source": "data/train_12/train/images/ta_jspark_00244.jpg",
+  "width": 1200,
+  "height": 675,
+  "counts": {
+    "concrete_pump": 1
+  },
+  "detections": [
+    {
+      "class": "concrete_pump",
+      "confidence": 0.9,
+      "bbox": [
+        141.2,
+        116.8,
+        617.6,
+        630.8
+      ]
+    }
+  ]
+}

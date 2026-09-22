@@ -1,0 +1,31 @@
+{
+  "source": "data/train_12/train/images/ta_hf_00371.jpg",
+  "width": 640,
+  "height": 640,
+  "counts": {
+    "excavator": 1,
+    "dump_truck": 1
+  },
+  "detections": [
+    {
+      "class": "excavator",
+      "confidence": 0.9,
+      "bbox": [
+        63.0,
+        0.0,
+        535.5,
+        461.5
+      ]
+    },
+    {
+      "class": "dump_truck",
+      "confidence": 0.9,
+      "bbox": [
+        193.0,
+        415.0,
+        639.0,
+        639.5
+      ]
+    }
+  ]
+}

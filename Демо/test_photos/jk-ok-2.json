@@ -1,0 +1,20 @@
+{
+  "source": "data/train_12/test/images/jsp_0002075_jpg.rf.c6d9032b98b516b215d5fcaca01a2ac1.jpg",
+  "width": 1200,
+  "height": 900,
+  "counts": {
+    "tower_crane": 1
+  },
+  "detections": [
+    {
+      "class": "tower_crane",
+      "confidence": 0.9,
+      "bbox": [
+        937.3,
+        0.0,
+        1025.4,
+        200.2
+      ]
+    }
+  ]
+}

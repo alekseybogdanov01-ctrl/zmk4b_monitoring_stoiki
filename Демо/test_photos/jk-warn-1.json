@@ -1,0 +1,50 @@
+{
+  "source": "data/train_12/train/images/jsp_0000092_jpg.rf.61610c2822b833cf802e847073b065b4.jpg",
+  "width": 907,
+  "height": 765,
+  "counts": {
+    "truck": 4
+  },
+  "detections": [
+    {
+      "class": "truck",
+      "confidence": 0.9,
+      "bbox": [
+        445.8,
+        433.0,
+        489.6,
+        480.1
+      ]
+    },
+    {
+      "class": "truck",
+      "confidence": 0.9,
+      "bbox": [
+        15.4,
+        664.2,
+        87.3,
+        704.8
+      ]
+    },
+    {
+      "class": "truck",
+      "confidence": 0.9,
+      "bbox": [
+        310.3,
+        551.1,
+        370.2,
+        597.4
+      ]
+    },
+    {
+      "class": "truck",
+      "confidence": 0.9,
+      "bbox": [
+        547.0,
+        290.1,
+        586.7,
+        322.7
+      ]
+    }
+  ]
+}

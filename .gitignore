@@ -1,0 +1,16 @@
+__pycache__/
+.venv/
+venv/
+*.pyc
+.env
+data/output/
+data/store.json
+data/photos/
+data/train_12/
+ml/runs/**/weights/
+ml/weights/*.pt
+frontend/node_modules/
+frontend/dist/
+*.pt
+!ml/runs/**/args.yaml
+.DS_Store
