@@ -133,6 +133,26 @@ def _fill_object_numbers(data: Dict[str, Any]) -> bool:
     return changed
 
 
+def clear_site_photos(site_id: str) -> None:
+    """Удаляет снимки объекта, чтобы повторный разбор не копил кадры."""
+    with _lock:
+        store = load_store()
+        doomed = [
+            pid
+            for pid, photo in (store.get("photos") or {}).items()
+            if photo.get("site_id") == site_id
+        ]
+        for pid in doomed:
+            photo = store["photos"].pop(pid)
+            path = PHOTOS_DIR / str(photo.get("path") or "")
+            if path.is_file():
+                path.unlink()
+        sessions = store.get("demo_sessions") or {}
+        for sid in [k for k, row in sessions.items() if row.get("site_id") == site_id]:
+            sessions.pop(sid, None)
+        save_store(store)
+
+
 def set_site_plan(site_id: str, plan: List[Dict[str, Any]]) -> Dict[str, Any]:
     with _lock:
         store = load_store()

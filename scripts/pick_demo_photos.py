@@ -1,4 +1,4 @@
-"""Подбор реальных фото из data/train_12 под сценарии ЖК → Демо/test_photos."""
+"""Подбор реальных фото из data/train_12 под сценарии ЖК → data/seed_photos."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 DATASET = ROOT / "data" / "train_12"
-OUT = ROOT / "Демо" / "test_photos"
+OUT = ROOT / "data" / "seed_photos"
 NAMES = {
     0: "excavator",
     1: "bulldozer",

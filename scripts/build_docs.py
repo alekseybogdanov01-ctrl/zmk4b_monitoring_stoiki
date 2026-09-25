@@ -324,7 +324,7 @@ def build(source: Path, target: Path) -> None:
         topMargin=18 * mm,
         bottomMargin=16 * mm,
         title=source.stem,
-        author="Build Watch",
+        author="СтройРадар",
     )
     width = doc.width
 
@@ -335,7 +335,7 @@ def build(source: Path, target: Path) -> None:
         canvas.drawRightString(
             A4[0] - 18 * mm, 10 * mm, f"стр. {document.page}"
         )
-        canvas.drawString(20 * mm, 10 * mm, "Build Watch — мониторинг стройплощадки")
+        canvas.drawString(20 * mm, 10 * mm, "СтройРадар — мониторинг стройплощадки")
         canvas.restoreState()
 
     lines = source.read_text(encoding="utf-8").splitlines()

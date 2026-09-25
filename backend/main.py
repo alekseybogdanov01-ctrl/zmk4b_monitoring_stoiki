@@ -45,7 +45,8 @@ logger = logging.getLogger(__name__)
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 MAX_UPLOAD_MB = 25
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEMO_PACK_DIR = PROJECT_ROOT / "Демо_конкурс"
+DEMO_PACK_DIR = PROJECT_ROOT / "Демо"
+DEMO_SITE_ID = "demo"
 
 app = FastAPI(
     title="Build Watch",
@@ -351,6 +352,8 @@ def api_dashboard() -> Dict[str, Any]:
     total_photos = 0
 
     for site in store.list_sites():
+        if site.get("address") == "Демо" or site.get("id") == DEMO_SITE_ID or site.get("name") == "ДЕМО":
+            continue
         photos = store.list_photos(site["id"])
         for photo in photos:
             for det in photo.get("detections") or []:
@@ -414,8 +417,7 @@ def api_dashboard() -> Dict[str, Any]:
             }
         )
 
-    order = {sid: i for i, sid in enumerate(_SEED_ORDER)}
-    rows.sort(key=lambda r: order.get(r["id"], 999))
+    rows.sort(key=lambda r: r.get("object_no") or 10**6)
 
     def severity_rank(row: Dict[str, Any]) -> int:
         code = row["status"]
@@ -802,22 +804,22 @@ def api_plan_template() -> Response:
     )
 
 
-# ── Готовый пакет из папки Демо_конкурс ──
+# ── Готовый пакет из папки Демо: график + фото/разбор ──
 
 
 def _demo_plan_path() -> Path:
     for name in ("календарный_план.xlsx", "календарный_план.csv"):
-        path = DEMO_PACK_DIR / "план" / name
+        path = DEMO_PACK_DIR / "график" / name
         if path.is_file():
             return path
     raise HTTPException(
         404,
-        "Демо-пакет не найден. Соберите его: python scripts/pack_demo_contest.py",
+        "Демо-пакет не найден: в папке Демо/график нет календарного плана.",
     )
 
 
 def _demo_shot_paths() -> List[Path]:
-    folder = DEMO_PACK_DIR / "снимки"
+    folder = DEMO_PACK_DIR / "фото" / "разбор"
     if not folder.is_dir():
         raise HTTPException(404, "В демо-пакете нет папки «снимки»")
     shots = sorted(
@@ -834,7 +836,7 @@ def api_demo_pack() -> Dict[str, Any]:
     plan = _demo_plan_path()
     shots = _demo_shot_paths()
     return {
-        "site_name": "ЖК «Демо-конкурс»",
+        "site_name": "ДЕМО",
         "base_date": "2025-01-10",
         "step_days": 10,
         "plan": {"name": plan.name, "url": "/api/demo/pack/plan"},
@@ -907,8 +909,8 @@ async def api_demo_analyze(
 
     site = store.upsert_site(
         {
-            "id": str(uuid.uuid4()),
-            "name": site_name,
+            "id": DEMO_SITE_ID,
+            "name": site_name or "ДЕМО",
             "lat": lat,
             "lng": lng,
             "address": "Демо",
@@ -917,6 +919,7 @@ async def api_demo_analyze(
         }
     )
     store.set_site_plan(site["id"], plan)
+    store.clear_site_photos(site["id"])
 
     uploaded: List[Dict[str, Any]] = []
     errors: List[str] = []

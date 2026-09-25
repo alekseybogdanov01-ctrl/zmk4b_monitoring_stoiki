@@ -8,10 +8,10 @@ data/store.json
 data/photos/
 data/train_12/
 ml/runs/**/weights/
-ml/weights/*.pt
 frontend/node_modules/
 frontend/dist/
 *.pt
+!ml/weights/best.pt
 !ml/runs/**/args.yaml
 .pytest_cache/
 .DS_Store

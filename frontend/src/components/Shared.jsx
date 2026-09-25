@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /** Раскладка подписей: внутри кадра и без наложений друг на друга. */
 function layoutLabels(detections, width, height, fontSize) {
@@ -161,18 +161,85 @@ const TIMELINE_STATUSES = [
   ["no_data", "Нет данных"],
 ];
 
-export function TimelineTable({ timeline, onSelectDay }) {
+function DayModal({ day, onClose }) {
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const deviations = (day.deviations || []).map((item) => ({
+    ...item,
+    date: day.date,
+  }));
+
+  return (
+    <div className="site-dialog-backdrop" onClick={onClose}>
+      <div
+        className="site-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="day-modal-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="panel-head">
+          <h2 id="day-modal-title">День {day.date}</h2>
+          <StatusBadge status={day.project_status || day.plan_status} />
+        </div>
+        <dl className="kv">
+          <div>
+            <dt>План</dt>
+            <dd>
+              {day.planned_stages?.length
+                ? day.planned_stages.map((s) => s.stage_label).join("; ")
+                : "—"}
+            </dd>
+          </div>
+          <div>
+            <dt>Факт</dt>
+            <dd>{day.primary_stage_label || "техника не распознана"}</dd>
+          </div>
+        </dl>
+        <h3 className="day-modal-title">Предупреждения</h3>
+        <DeviationList deviations={deviations} />
+        {day.photo_ids?.length > 0 && (
+          <div className="photo-links">
+            {day.photo_ids.map((id) => (
+              <a key={id} className="btn ghost sm" href={`#/photo/${id}`}>
+                Открыть снимок {id.slice(0, 8)}
+              </a>
+            ))}
+          </div>
+        )}
+        <div className="site-dialog-actions">
+          <button type="button" className="btn ghost sm" onClick={onClose}>
+            Закрыть
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function TimelineTable({ timeline }) {
   const [status, setStatus] = useState("all");
+  const [openedDay, setOpenedDay] = useState(null);
+  const withPhotos = useMemo(
+    () => (timeline || []).filter((d) => (d.photo_ids || []).length > 0),
+    [timeline],
+  );
   const present = useMemo(() => {
-    const codes = new Set((timeline || []).map((d) => d.project_status || d.plan_status));
+    const codes = new Set(withPhotos.map((d) => d.project_status || d.plan_status));
     return TIMELINE_STATUSES.filter(([code]) => codes.has(code));
-  }, [timeline]);
+  }, [withPhotos]);
   const rows =
     status === "all"
-      ? timeline || []
-      : (timeline || []).filter((d) => (d.project_status || d.plan_status) === status);
+      ? withPhotos
+      : withPhotos.filter((d) => (d.project_status || d.plan_status) === status);
 
-  if (!timeline?.length) return <p className="muted">Таймлайн пуст</p>;
+  if (!withPhotos.length) return <p className="muted">Таймлайн пуст</p>;
 
   return (
     <>
@@ -184,10 +251,10 @@ export function TimelineTable({ timeline, onSelectDay }) {
           onClick={() => setStatus("all")}
         >
           Все
-          <span className="mono muted">{timeline.length}</span>
+          <span className="mono muted">{withPhotos.length}</span>
         </button>
         {present.map(([code, label]) => {
-          const count = timeline.filter(
+          const count = withPhotos.filter(
             (d) => (d.project_status || d.plan_status) === code,
           ).length;
           return (
@@ -213,7 +280,6 @@ export function TimelineTable({ timeline, onSelectDay }) {
                 <th>План</th>
                 <th>Факт (этап)</th>
                 <th>Статус</th>
-                <th>Откл.</th>
                 <th />
               </tr>
             </thead>
@@ -230,12 +296,11 @@ export function TimelineTable({ timeline, onSelectDay }) {
                   <td>
                     <StatusBadge status={day.project_status || day.plan_status} />
                   </td>
-                  <td>{day.deviations?.length || 0}</td>
                   <td>
                     <button
                       type="button"
                       className="btn ghost sm"
-                      onClick={() => onSelectDay?.(day)}
+                      onClick={() => setOpenedDay(day)}
                     >
                       Открыть
                     </button>
@@ -248,6 +313,7 @@ export function TimelineTable({ timeline, onSelectDay }) {
       ) : (
         <p className="muted">Нет дней с выбранным статусом</p>
       )}
+      {openedDay && <DayModal day={openedDay} onClose={() => setOpenedDay(null)} />}
     </>
   );
 }

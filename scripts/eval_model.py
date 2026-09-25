@@ -7,7 +7,7 @@
 1. берёт все доступные кадры (демо-снимки и кадры таймлапсов);
 2. раскладывает их по условиям съёмки: освещённость и наличие зелени;
 3. прогоняет модель, замеряет время инференса;
-4. копирует отобранные кадры в «Демо_конкурс/проверочный_набор»;
+4. копирует отобранные кадры в «data/проверочный_набор»;
 5. пишет отчёт в docs/отчёт_тестирования.md.
 
 Запуск: py -m scripts.eval_model
@@ -35,12 +35,13 @@ from ml.classes import CLASS_LABELS_RU  # noqa: E402
 from ml.infer import _imread, detect_image, load_model, resolve_weights  # noqa: E402
 
 SOURCE_DIRS = [
-    PROJECT_ROOT / "Демо" / "test_photos",
-    PROJECT_ROOT / "Демо" / "video_1_frames",
-    PROJECT_ROOT / "Демо" / "video_2_frames",
-    PROJECT_ROOT / "Демо_конкурс" / "снимки",
+    PROJECT_ROOT / "data" / "seed_photos",
+    PROJECT_ROOT / "data" / "timelapse_frames" / "video_1_frames",
+    PROJECT_ROOT / "data" / "timelapse_frames" / "video_2_frames",
+    PROJECT_ROOT / "Демо" / "фото" / "разбор",
+    PROJECT_ROOT / "Демо" / "фото" / "техника",
 ]
-OUT_DIR = PROJECT_ROOT / "Демо_конкурс" / "проверочный_набор"
+OUT_DIR = PROJECT_ROOT / "data" / "проверочный_набор"
 REPORT_PATH = PROJECT_ROOT / "docs" / "отчёт_тестирования.md"
 
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
@@ -253,7 +254,7 @@ def _write_report(
         "",
         f"- всего просмотрено кадров: **{len(rows)}**",
         f"- отобрано в проверочный набор: **{len(picked)}**",
-        "- расположение: `Демо_конкурс/проверочный_набор/<освещённость>/<сезон>/`",
+        "- расположение: `data/проверочный_набор/<освещённость>/<сезон>/`",
         "",
         "### Разброс по освещённости",
         "",

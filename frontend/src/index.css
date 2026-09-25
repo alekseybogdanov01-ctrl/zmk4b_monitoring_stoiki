@@ -2108,6 +2108,7 @@ textarea:focus {
 .db-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 0.86rem;
 }
 
@@ -2127,6 +2128,12 @@ textarea:focus {
   padding: 11px 10px;
   border-bottom: 1px solid var(--line);
   vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.db-table th:nth-child(1),
+.db-table td:nth-child(1) {
+  width: 52px;
 }
 
 .db-table tbody tr {
@@ -2141,9 +2148,10 @@ textarea:focus {
   background: var(--accent-dim);
 }
 
-.db-table-name {
+td.db-table-name {
+  display: table-cell;
   font-weight: 650;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .site-dialog-backdrop {
@@ -2169,6 +2177,11 @@ textarea:focus {
 
 .site-dialog h2 {
   margin: 0 0 8px;
+}
+
+.day-modal-title {
+  margin: 18px 0 8px;
+  font-size: 1rem;
 }
 
 .cad-lookup {
@@ -2883,9 +2896,6 @@ textarea:focus {
 }
 
 .db-table-name {
-  display: flex;
-  align-items: center;
-  gap: 9px;
   color: inherit;
 }
 

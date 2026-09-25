@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchSites, fetchStages, loadDemoPackFiles, runDemoAnalyze } from "../api.js";
-import { DeviationList, TimelineTable, StatusBadge } from "../components/Shared.jsx";
+import { TimelineTable } from "../components/Shared.jsx";
 import FileField from "../components/FileField.jsx";
 
+const DEMO_OPTION = "demo-pack";
 const STAGE_ORDER = ["clearing", "excavation", "foundations", "frame", "landscaping"];
 
 const STAGE_FALLBACK = [
@@ -60,13 +61,12 @@ export default function DemoPage() {
   const [previews, setPreviews] = useState([]);
   const [baseDate, setBaseDate] = useState("2025-01-10");
   const [stepDays, setStepDays] = useState(10);
-  const [siteName, setSiteName] = useState("Демо-площадка (ТЗ)");
+  const [siteName, setSiteName] = useState("ДЕМО");
   const [fromPack, setFromPack] = useState(false);
   const [busy, setBusy] = useState(false);
   const [loadingPack, setLoadingPack] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
-  const [selectedDay, setSelectedDay] = useState(null);
 
   const dates = useMemo(() => {
     return photoFiles.map((_, i) => addDays(baseDate, i * Number(stepDays || 1)));
@@ -74,7 +74,13 @@ export default function DemoPage() {
 
   useEffect(() => {
     fetchSites()
-      .then((data) => setSites((data.sites || []).filter((site) => site.plan?.length)))
+      .then((data) =>
+        setSites(
+          (data.sites || []).filter(
+            (site) => site.plan?.length && site.address !== "Демо" && site.id !== "demo",
+          ),
+        ),
+      )
       .catch(() => setSites([]));
     fetchStages()
       .then((data) => {
@@ -88,6 +94,7 @@ export default function DemoPage() {
 
   useEffect(() => {
     if (planMode === "existing") {
+      if (existingId === DEMO_OPTION) return;
       const site = sites.find((item) => item.id === existingId);
       setPlanFile(site ? rowsToFile(site.plan, "plan.csv") : null);
     } else if (planMode === "editor") {
@@ -123,7 +130,7 @@ export default function DemoPage() {
     setResult(null);
   };
 
-  const onLoadPack = async () => {
+  const onLoadPack = async ({ keepMode = false } = {}) => {
     setError(null);
     setLoadingPack(true);
     try {
@@ -132,9 +139,9 @@ export default function DemoPage() {
       setPhotoFiles(pack.photos);
       setBaseDate(pack.baseDate);
       setStepDays(pack.stepDays);
-      setSiteName(pack.siteName);
+      setSiteName("ДЕМО");
       setFromPack(true);
-      setPlanMode("file");
+      if (!keepMode) setPlanMode("file");
       setResult(null);
     } catch (e) {
       setError(e.message || String(e));
@@ -162,9 +169,6 @@ export default function DemoPage() {
         siteName,
       });
       setResult(data);
-      setSelectedDay(
-        data.timeline?.find((d) => d.deviations?.length) || data.timeline?.[0] || null,
-      );
     } catch (e) {
       setError(e.message || String(e));
     } finally {
@@ -197,7 +201,7 @@ export default function DemoPage() {
 
       {fromPack && (
         <p className="demo-pack-note">
-          Подставлен пакет из папки <code>Демо_конкурс</code>: план и 5 кадров таймлапса.
+          Подставлен пакет из папки <code>Демо</code>: график и 15 кадров по всем этапам.
           Даты уже проставлены — можно сразу запускать анализ.
         </p>
       )}
@@ -253,11 +257,20 @@ export default function DemoPage() {
                     value={existingId}
                     disabled={blocked}
                     onChange={(e) => {
-                      setExistingId(e.target.value);
+                      const next = e.target.value;
+                      setExistingId(next);
+                      if (next === DEMO_OPTION) {
+                        onLoadPack({ keepMode: true });
+                        return;
+                      }
                       setFromPack(false);
+                      setPhotoFiles([]);
                     }}
                   >
                     <option value="">Выберите объект</option>
+                    <option value={DEMO_OPTION}>
+                      ДЕМО — Загрузите для демонстрации продукта
+                    </option>
                     {sites.map((site) => (
                       <option key={site.id} value={site.id}>
                         {site.name}
@@ -458,8 +471,7 @@ export default function DemoPage() {
               </a>
             </div>
             <p>
-              Объект: <strong>{result.site.name}</strong> · фото: {result.photos.length} ·
-              отклонений: {result.deviations.length}
+              Объект: <strong>{result.site.name}</strong> · фото: {result.photos.length}
             </p>
             {result.performance && (
               <p className="muted">
@@ -475,63 +487,9 @@ export default function DemoPage() {
           </section>
 
           <section className="panel">
-            <h2>Предупреждения (отклонения)</h2>
-            <DeviationList deviations={result.deviations} />
-          </section>
-
-          <section className="panel">
             <h2>Таймлайн план / факт</h2>
-            <TimelineTable timeline={result.timeline} onSelectDay={setSelectedDay} />
+            <TimelineTable timeline={result.timeline} />
           </section>
-
-          {selectedDay && (
-            <section className="panel day-detail">
-              <div className="panel-head">
-                <h2>День {selectedDay.date}</h2>
-                <StatusBadge status={selectedDay.project_status || selectedDay.plan_status} />
-              </div>
-              <dl className="kv">
-                <div>
-                  <dt>План</dt>
-                  <dd>
-                    {selectedDay.planned_stages?.length
-                      ? selectedDay.planned_stages
-                          .map((s) => s.stage_label)
-                          .join("; ")
-                      : "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Факт (этап)</dt>
-                  <dd>{selectedDay.primary_stage_label || "техника не распознана / нет маркера"}</dd>
-                </div>
-                <div>
-                  <dt>Техника на снимках</dt>
-                  <dd className="mono">
-                    {Object.entries(selectedDay.counts || {})
-                      .map(([k, v]) => `${k}:${v}`)
-                      .join(" ") || "—"}
-                  </dd>
-                </div>
-              </dl>
-              <DeviationList
-                deviations={(selectedDay.deviations || []).map((d) => ({
-                  ...d,
-                  date: selectedDay.date,
-                }))}
-              />
-              {selectedDay.photo_ids?.length > 0 && (
-                <div className="photo-links">
-                  <h3>Подтверждающие снимки</h3>
-                  {selectedDay.photo_ids.map((id) => (
-                    <a key={id} className="btn ghost sm" href={`#/photo/${id}`}>
-                      Открыть снимок {id.slice(0, 8)}…
-                    </a>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
 
           <section className="panel">
             <h2>Методика «этап → техника»</h2>

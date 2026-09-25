@@ -276,9 +276,11 @@ export default function DashboardPage() {
   const queryText = query.trim();
   const listQueryText = listQuery.trim();
   const wall = data.sites.filter((s) => siteMatches(s, filter) && siteMatchesQuery(s, query));
-  const registry = data.sites.filter(
-    (s) => siteMatches(s, filter) && siteMatchesQuery(s, listQuery),
-  );
+  const registry = data.sites
+    .filter((s) => s.address !== "Демо" && s.id !== "demo" && s.name !== "ДЕМО")
+    .filter((s) => siteMatches(s, filter) && siteMatchesQuery(s, listQuery))
+    .slice()
+    .sort((a, b) => (a.object_no || 0) - (b.object_no || 0));
   const activeStatus = data.by_status.find((s) => s.code === filter);
 
   const scrollToMap = () => {
@@ -570,12 +572,12 @@ export default function DashboardPage() {
       <section className="panel" id="all-sites">
         <div className="db-section-head">
           <h2>Все объекты ({registry.length})</h2>
-          {filter && (
-            <button type="button" className="btn ghost sm" onClick={() => setFilter(null)}>
-              Показать все
-            </button>
-          )}
           <div className="db-head-actions">
+            {filter && (
+              <button type="button" className="btn ghost sm" onClick={() => setFilter(null)}>
+                Показать все
+              </button>
+            )}
             <button type="button" className="btn sm" onClick={() => setAddOpen(true)}>
               Добавить объект
             </button>

@@ -124,7 +124,7 @@ export async function uploadSitePlan(siteId, file) {
   return res.json();
 }
 
-/** Готовый пакет из папки Демо_конкурс: метаданные + URL файлов. */
+/** Готовый пакет из папки Демо: метаданные + URL файлов. */
 export async function fetchDemoPack() {
   const res = await fetch("/api/demo/pack");
   if (!res.ok) throw new Error(await parseError(res));

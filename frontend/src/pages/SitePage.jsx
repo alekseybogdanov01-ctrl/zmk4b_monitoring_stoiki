@@ -6,7 +6,7 @@ import {
   uploadSitePhoto,
   uploadSitePlan,
 } from "../api.js";
-import { DeviationList, TimelineTable, StatusBadge } from "../components/Shared.jsx";
+import { TimelineTable, StatusBadge } from "../components/Shared.jsx";
 import FileField from "../components/FileField.jsx";
 
 const STAGE_ORDER = ["clearing", "excavation", "foundations", "frame", "landscaping"];
@@ -89,7 +89,6 @@ function stageTitle(stages, code) {
 export default function SitePage({ siteId }) {
   const [site, setSite] = useState(null);
   const [timeline, setTimeline] = useState([]);
-  const [selectedDay, setSelectedDay] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [savedNote, setSavedNote] = useState("");
@@ -398,30 +397,8 @@ export default function SitePage({ siteId }) {
 
       <section className="panel">
         <h2>Таймлайн</h2>
-        <TimelineTable timeline={timeline} onSelectDay={(day) => setSelectedDay(day)} />
+        <TimelineTable timeline={timeline} />
       </section>
-
-      {selectedDay && (
-        <section className="panel">
-          <div className="panel-head">
-            <h2>День {selectedDay.date}</h2>
-            <StatusBadge status={selectedDay.project_status || selectedDay.plan_status} />
-          </div>
-          <DeviationList
-            deviations={(selectedDay.deviations || []).map((item) => ({
-              ...item,
-              date: selectedDay.date,
-            }))}
-          />
-          <div className="photo-links">
-            {(selectedDay.photo_ids || []).map((id) => (
-              <a key={id} className="btn ghost sm" href={`#/photo/${id}`}>
-                Снимок {id.slice(0, 8)}
-              </a>
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

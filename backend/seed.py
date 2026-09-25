@@ -17,8 +17,8 @@ from ml.classes import CLASS_COLORS
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-SAMPLES_DIR = PROJECT_ROOT / "Демо"
-TEST_PHOTOS_DIR = SAMPLES_DIR / "test_photos"
+SAMPLES_DIR = PROJECT_ROOT / "data" / "seed_photos"
+TEST_PHOTOS_DIR = SAMPLES_DIR
 SEED_VERSION = 9
 
 EXAMPLE_CSV = """stage,date_from,date_to
@@ -301,7 +301,7 @@ def render_test_photo(
 
 
 def _load_or_make_photo(spec: dict) -> tuple[Path, int, int, list, dict]:
-    """Реальное фото из Демо/test_photos (+ json разметки), иначе fallback."""
+    """Реальное фото из data/seed_photos (+ json разметки), иначе fallback."""
     import json
 
     site_id = spec["id"]

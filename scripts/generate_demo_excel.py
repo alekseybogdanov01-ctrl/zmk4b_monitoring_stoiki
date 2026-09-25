@@ -13,7 +13,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "Демо" / "demo_schedule_timelapse.xlsx"
+OUT = ROOT / "data" / "seed_photos" / "demo_schedule_timelapse.xlsx"
 
 # Старт строительства (первый снимок таймлапса)
 START = date(2025, 1, 10)
