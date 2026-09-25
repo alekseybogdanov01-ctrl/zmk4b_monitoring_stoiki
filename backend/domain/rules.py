@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional, Set
 
 from backend.domain.stages import (
     STAGE_LABELS_RU,
     STAGE_LINKS,
     STAGE_MARKERS,
-    STAGE_OPTIONAL,
     STAGE_PRIORITY,
     SUPPORT_ONLY,
 )
 from backend.domain.status import status_from_day
+from ml.classes import CLASS_LABELS_RU
+
+
+def _ru(class_code: str) -> str:
+    return CLASS_LABELS_RU.get(class_code, class_code)
 
 
 def _as_date(value: str | date | datetime) -> date:
@@ -39,18 +43,30 @@ def present_classes(counts: Dict[str, int]) -> Set[str]:
 
 
 def infer_stages(present: Set[str]) -> List[str]:
+    """Факт по технике. Первый элемент — главный этап кадра."""
     found: List[str] = []
-    for stage in STAGE_PRIORITY:
-        markers = STAGE_MARKERS[stage]
-        if not (present & markers):
-            continue
-        if stage == "superstructure":
-            if present & STAGE_MARKERS["piling"]:
-                continue
-            if present & STAGE_MARKERS["monolith"]:
-                continue
-        found.append(stage)
+    if present & STAGE_MARKERS["foundations"]:
+        found.append("foundations")
+    # Каток рядом с экскаватором или бульдозером — ещё не благоустройство.
+    if present & STAGE_MARKERS["landscaping"] and not (
+        present & {"excavator", "bulldozer"}
+    ):
+        found.append("landscaping")
+    if present & STAGE_MARKERS["frame"]:
+        found.append("frame")
+    if present & STAGE_MARKERS["excavation"]:
+        found.append("excavation")
+    # Бульдозер рядом с экскаватором остаётся котлованом.
+    if present & STAGE_MARKERS["clearing"] and "excavator" not in present:
+        found.append("clearing")
     return found
+
+
+def active_links(stage: str, present: Set[str]) -> List[Set[str]]:
+    """Звено каркаса проверяем только когда на кадре уже есть бетонная техника."""
+    if stage == "frame" and not (present & {"concrete_mixer", "concrete_pump"}):
+        return []
+    return STAGE_LINKS.get(stage, [])
 
 
 def primary_stage(inferred: List[str]) -> Optional[str]:
@@ -119,7 +135,7 @@ def analyze_day(
 
         if has_marker:
             plan_status = "on_track"
-            links = STAGE_LINKS.get(main_plan, [])
+            links = active_links(main_plan, present)
             if links and not _link_satisfied(present, links):
                 missing = _missing_link_groups(present, links)
                 deviations.append(
@@ -131,7 +147,7 @@ def analyze_day(
                         "message": (
                             f"На этапе «{label}» есть маркерная техника, "
                             f"но неполное звено (нет: "
-                            f"{', '.join('/'.join(g) for g in missing)}). "
+                            f"{', '.join(' или '.join(_ru(c) for c in g) for g in missing)}). "
                             f"Возможно снижение темпа работ."
                         ),
                         "missing_groups": missing,
@@ -149,7 +165,8 @@ def analyze_day(
                     "stage_label": label,
                     "message": (
                         f"По плану этап «{label}», но необходимая техника "
-                        f"не обнаружена (ожидалось: {', '.join(sorted(markers))})."
+                        f"не обнаружена (ожидалось: "
+                        f"{', '.join(_ru(c) for c in sorted(markers))})."
                     ),
                     "expected_markers": sorted(markers),
                     "photo_ids": photo_ids,
@@ -224,7 +241,6 @@ def build_timeline(
     plan_rows: List[Dict[str, Any]],
     photos: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """Только даты, на которые есть снимки (не каждый день плана)."""
     by_day: Dict[str, Dict[str, Any]] = {}
 
     for photo in photos:
@@ -234,6 +250,17 @@ def build_timeline(
         bucket = by_day.setdefault(day, {"photo_ids": [], "detections": []})
         bucket["photo_ids"].append(photo["id"])
         bucket["detections"].extend(photo.get("detections") or [])
+
+    for row in plan_rows:
+        start = _as_date(row["date_from"])
+        end = _as_date(row["date_to"])
+        cur = start
+        # ограничиваем разворот плана (защита от огромных CSV)
+        guard = 0
+        while cur <= end and guard < 400:
+            by_day.setdefault(cur.isoformat(), {"photo_ids": [], "detections": []})
+            cur = cur + timedelta(days=1)
+            guard += 1
 
     reports: List[Dict[str, Any]] = []
     for day in sorted(by_day.keys()):

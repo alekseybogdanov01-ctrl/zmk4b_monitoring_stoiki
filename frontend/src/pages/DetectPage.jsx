@@ -95,13 +95,22 @@ export default function DetectPage() {
         <div>
           <h1>Тест модели</h1>
           <p className="subtitle">
-            Загрузите один кадр — YOLO отметит технику (без плана и отклонений)
+            Загрузите один кадр — ML-модель отметит технику (без плана и отклонений), если у
+            вас нет кадров со стройки, возьмите изображение{" "}
+            <a
+              href="https://yandex.ru/images/search?from=tabbar&lr=16&text=%D1%81%D1%82%D1%80%D0%BE%D0%B8%D1%82%D0%B5%D0%BB%D1%8C%D0%BD%D0%B0%D1%8F%20%D0%BF%D0%BB%D0%BE%D1%89%D0%B0%D0%B4%D0%BA%D0%B0%20%D0%B2%D0%B8%D0%B4%20%D1%81%20%D0%BA%D0%B0%D0%BC%D0%B5%D1%80%D1%8B"
+              target="_blank"
+              rel="noreferrer"
+            >
+              отсюда
+            </a>
+            .
           </p>
         </div>
       </header>
 
       <div className="layout">
-        <section className="panel" style={{ padding: 0 }}>
+        <section className="panel flush">
           <div className="panel-head">
             <h2>Кадр</h2>
             <div className="toolbar">
@@ -168,15 +177,13 @@ export default function DetectPage() {
             </div>
           )}
 
-          <div
-            className="panel-head"
-            style={{ borderTop: "1px solid var(--line)", borderBottom: "none" }}
-          >
+          <div className="panel-head">
             {error ? (
               <span className="status-line error">{error}</span>
             ) : result ? (
               <span className="status-line">
                 найдено: {total} · {result.width}×{result.height}
+                {result.inference_ms != null && ` · ${result.inference_ms} мс`}
               </span>
             ) : (
               <span className="status-line">ожидание кадра</span>
@@ -225,6 +232,10 @@ export default function DetectPage() {
               <div>
                 <dt>Детекций</dt>
                 <dd>{result ? total : "—"}</dd>
+              </div>
+              <div>
+                <dt>Время детекции</dt>
+                <dd>{result?.inference_ms != null ? `${result.inference_ms} мс` : "—"}</dd>
               </div>
             </dl>
           </div>

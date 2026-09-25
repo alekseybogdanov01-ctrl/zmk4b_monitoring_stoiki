@@ -76,6 +76,63 @@ def upsert_site(site: Dict[str, Any]) -> Dict[str, Any]:
         return site
 
 
+def ensure_object_numbers() -> None:
+    """Короткий номер объекта для тех площадок, у которых его ещё нет."""
+    with _lock:
+        data = load_store()
+        if _fill_object_numbers(data):
+            save_store(data)
+
+
+def insert_site(site: Dict[str, Any]) -> Dict[str, Any]:
+    """Новая площадка с очередным номером. Пустое имя становится «Объект № N»."""
+    with _lock:
+        data = load_store()
+        _fill_object_numbers(data)
+        number = _next_object_no(data)
+        site_id = site.get("id") or str(uuid.uuid4())
+        name = str(site.get("name") or "").strip() or f"Объект № {number}"
+        record = {
+            **site,
+            "id": site_id,
+            "name": name,
+            "object_no": number,
+            "plan": site.get("plan") or [],
+            "created_at": _now_iso(),
+            "updated_at": _now_iso(),
+        }
+        data["sites"][site_id] = record
+        save_store(data)
+        return record
+
+
+def _next_object_no(data: Dict[str, Any]) -> int:
+    numbers = [
+        site.get("object_no")
+        for site in (data.get("sites") or {}).values()
+        if isinstance(site.get("object_no"), int)
+    ]
+    return max(numbers, default=0) + 1
+
+
+def _fill_object_numbers(data: Dict[str, Any]) -> bool:
+    sites = data.get("sites") or {}
+    changed = False
+    pending = sorted(
+        (
+            (site.get("created_at") or "", site_id)
+            for site_id, site in sites.items()
+            if not isinstance(site.get("object_no"), int)
+        )
+    )
+    number = _next_object_no(data)
+    for _, site_id in pending:
+        sites[site_id]["object_no"] = number
+        number += 1
+        changed = True
+    return changed
+
+
 def set_site_plan(site_id: str, plan: List[Dict[str, Any]]) -> Dict[str, Any]:
     with _lock:
         store = load_store()

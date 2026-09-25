@@ -11,27 +11,46 @@ from backend.domain.stages import STAGE_LABELS_RU
 
 # Нормализация названий этапов из русскоязычных CSV
 STAGE_ALIASES: Dict[str, str] = {
-    "earthworks": "earthworks",
-    "земляные": "earthworks",
-    "земляные работы": "earthworks",
-    "котлован": "earthworks",
-    "разработка котлована": "earthworks",
-    "устройство котлована": "earthworks",
-    "piling": "piling",
-    "сваи": "piling",
-    "свайные": "piling",
-    "свайный фундамент": "piling",
-    "свайные работы": "piling",
-    "monolith": "monolith",
-    "монолит": "monolith",
-    "монолитные": "monolith",
-    "монолитные работы": "monolith",
-    "бетонирование": "monolith",
-    "superstructure": "superstructure",
-    "надземная": "superstructure",
-    "надземная часть": "superstructure",
-    "монтаж": "superstructure",
-    "монтажные работы": "superstructure",
+    "clearing": "clearing",
+    "расчистка": "clearing",
+    "расчистка участка": "clearing",
+    "excavation": "excavation",
+    "откопка": "excavation",
+    "откопка котлована": "excavation",
+    "котлован": "excavation",
+    "разработка котлована": "excavation",
+    "устройство котлована": "excavation",
+    "земляные": "excavation",
+    "земляные работы": "excavation",
+    "earthworks": "excavation",
+    "foundations": "foundations",
+    "фундамент": "foundations",
+    "фундаменты": "foundations",
+    "устройство фундаментов": "foundations",
+    "сваи": "foundations",
+    "свайные": "foundations",
+    "свайный фундамент": "foundations",
+    "свайные работы": "foundations",
+    "piling": "foundations",
+    "frame": "frame",
+    "каркас": "frame",
+    "монтаж каркаса": "frame",
+    "монтаж каркаса, стены и перекрытия": "frame",
+    "стены и перекрытия": "frame",
+    "возведение стен": "frame",
+    "перекрытия": "frame",
+    "монолит": "frame",
+    "монолитные": "frame",
+    "монолитные работы": "frame",
+    "бетонирование": "frame",
+    "monolith": "frame",
+    "надземная": "frame",
+    "надземная часть": "frame",
+    "монтаж": "frame",
+    "монтажные работы": "frame",
+    "superstructure": "frame",
+    "landscaping": "landscaping",
+    "благоустройство": "landscaping",
 }
 
 
@@ -85,7 +104,7 @@ def parse_plan_csv(text: str) -> List[Dict[str, Any]]:
                 raise ValueError(
                     f"Строка {i}: неизвестный этап «{stage_raw}». "
                     f"Допустимо: {', '.join(STAGE_LABELS_RU.keys())} "
-                    f"или русские названия (котлован, сваи, монолит, монтаж)."
+                    f"или русские названия (расчистка, котлован, фундаменты, каркас, благоустройство)."
                 )
         if not date_from or not date_to:
             raise ValueError(f"Строка {i}: нужны date_from и date_to")
@@ -106,7 +125,7 @@ def parse_plan_csv(text: str) -> List[Dict[str, Any]]:
 
 def parse_plan_bytes(raw: bytes, filename: str) -> List[Dict[str, Any]]:
     name = (filename or "").lower()
-    if name.endswith(".xlsx") or name.endswith(".xls"):
+    if name.endswith((".xlsx", ".xls")):
         return _parse_excel(raw)
     # utf-8-sig для Excel-CSV
     try:

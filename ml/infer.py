@@ -20,11 +20,11 @@ from ml.classes import (
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-# Приоритет весов: train_all (9 классов) → train_mixed → fallback
+# Приоритет: актуальные веса (Ml_v2, yolov8m, 12 классов) → старые прогоны → yolov8n
 _WEIGHT_CANDIDATES = [
+    PROJECT_ROOT / "ml" / "weights" / "best.pt",
     PROJECT_ROOT / "ml" / "runs" / "detect" / "train_all_v1" / "weights" / "best.pt",
     PROJECT_ROOT / "ml" / "runs" / "detect" / "train_mixed" / "weights" / "best.pt",
-    PROJECT_ROOT / "ml" / "weights" / "best.pt",
 ]
 FALLBACK_WEIGHTS = "yolov8n.pt"
 
@@ -57,15 +57,34 @@ def load_model(weights_path: str | Path | None = None) -> YOLO:
     return model
 
 
+def _normalize_name(raw_name: str) -> str:
+    key = str(raw_name).strip().lower().replace(" ", "_").replace("-", "_")
+    return CLASS_NAME_ALIASES.get(key, key)
+
+
 def _map_class(cls_id: int, raw_name: str | None = None) -> Optional[str]:
     """Сначала по имени модели (устойчиво к смене порядка id), затем по CLASS_MAPPING."""
     known = set(CLASS_MAPPING.values())
     if raw_name is not None:
-        key = raw_name.strip().lower().replace(" ", "_").replace("-", "_")
-        key = CLASS_NAME_ALIASES.get(key, key)
+        key = _normalize_name(raw_name)
         if key in known:
             return key
+        # Имя осмысленное, но чужое (COCO и пр.) — по id угадывать нельзя:
+        # иначе train становится tower_crane, а person — excavator.
+        if not str(raw_name).strip().isdigit():
+            return None
     return CLASS_MAPPING.get(int(cls_id))
+
+
+def is_fallback_weights(path: str) -> bool:
+    """True, если загружены не наши веса, а предобученная модель по умолчанию."""
+    return path == FALLBACK_WEIGHTS
+
+
+def model_class_coverage(model: YOLO) -> int:
+    """Сколько из наших классов модель реально способна выдать."""
+    known = set(CLASS_MAPPING.values())
+    return len({_normalize_name(n) for n in model.names.values()} & known)
 
 
 def _class_threshold(equipment_class: str) -> float:

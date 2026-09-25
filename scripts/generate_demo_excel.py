@@ -1,12 +1,7 @@
 """Генерация Excel календарного плана для Демо (таймлапс каждые 10 дней).
 
-Ориентиры по срокам монолитного ЖК ~15–20 этажей (отраслевые средние РФ):
-  земляные / котлован     — 1,5–2,5 мес
-  свайный фундамент       — 1–2 мес (частично пересекается с котлованом)
-  монолитный каркас       — 5–8 мес (основной объём)
-  надземный монтаж/краны  — параллельно монолиту и до 1–2 мес после
-
-Итоговый горизонт демо: ~12 месяцев, кадр каждые 10 дней.
+Пять этапов: расчистка, котлован, фундаменты, каркас со стенами и перекрытиями,
+благоустройство. Горизонт демо ~12 месяцев, кадр каждые 10 дней.
 """
 
 from __future__ import annotations
@@ -26,51 +21,58 @@ PHOTO_STEP_DAYS = 10
 # ~36 кадров ≈ 12 месяцев
 PHOTO_COUNT = 36
 
-# Этапы: средние доли цикла монолитного ЖК
-# (даты с небольшим перекрытием — как в реальном ГПР)
 STAGES = [
     {
-        "stage": "earthworks",
-        "name_ru": "Земляные работы / котлован",
+        "stage": "clearing",
+        "name_ru": "Расчистка участка",
         "date_from": date(2025, 1, 10),
-        "date_to": date(2025, 3, 20),
-        "zone": "Котлован / нулевой цикл",
-        "typical_months": "1,5–2,5",
-        "equipment": "excavator, bulldozer, dump_truck/truck, loader, roller",
+        "date_to": date(2025, 2, 20),
+        "zone": "Площадка",
+        "typical_months": "1–1,5",
+        "equipment": "bulldozer/loader, dump_truck/truck",
     },
     {
-        "stage": "piling",
-        "name_ru": "Свайный фундамент",
-        "date_from": date(2025, 2, 20),
+        "stage": "excavation",
+        "name_ru": "Откопка котлована",
+        "date_from": date(2025, 2, 10),
         "date_to": date(2025, 4, 20),
-        "zone": "Свайное поле",
+        "zone": "Котлован",
+        "typical_months": "1,5–2,5",
+        "equipment": "excavator, dump_truck/truck",
+    },
+    {
+        "stage": "foundations",
+        "name_ru": "Устройство фундаментов",
+        "date_from": date(2025, 4, 1),
+        "date_to": date(2025, 6, 10),
+        "zone": "Фундамент",
         "typical_months": "1–2",
         "equipment": "pile_driver, autocrane/crane_manipulator",
     },
     {
-        "stage": "monolith",
-        "name_ru": "Монолитные работы",
-        "date_from": date(2025, 4, 1),
-        "date_to": date(2025, 10, 31),
-        "zone": "Каркас / плиты перекрытий",
+        "stage": "frame",
+        "name_ru": "Монтаж каркаса, стены и перекрытия",
+        "date_from": date(2025, 5, 20),
+        "date_to": date(2025, 11, 20),
+        "zone": "Каркас",
         "typical_months": "5–8",
-        "equipment": "concrete_mixer, concrete_pump, tower_crane",
+        "equipment": "tower_crane, concrete_mixer, concrete_pump",
     },
     {
-        "stage": "superstructure",
-        "name_ru": "Надземная часть / монтаж",
-        "date_from": date(2025, 5, 1),
-        "date_to": date(2025, 12, 20),
-        "zone": "Монтаж / крановые работы",
-        "typical_months": "параллельно монолиту + 1–2 мес",
-        "equipment": "tower_crane, autocrane, crane_manipulator",
+        "stage": "landscaping",
+        "name_ru": "Благоустройство",
+        "date_from": date(2025, 11, 1),
+        "date_to": date(2025, 12, 30),
+        "zone": "Территория",
+        "typical_months": "1–2",
+        "equipment": "roller",
     },
 ]
 
 
 def _primary_stage(day: date) -> tuple[str, str]:
-    """Приоритет как в методике: piling > monolith > earthworks > superstructure."""
-    order = ["piling", "monolith", "earthworks", "superstructure"]
+    """При пересечении сроков берём более поздний этап графика."""
+    order = ["landscaping", "frame", "foundations", "excavation", "clearing"]
     labels = {s["stage"]: s["name_ru"] for s in STAGES}
     active = [
         s["stage"]
@@ -89,7 +91,7 @@ def build_workbook() -> Workbook:
     # ── Лист 1: план для загрузки в Демо ──
     ws = wb.active
     ws.title = "plan"
-    headers = ["stage", "date_from", "date_to", "zone"]
+    headers = ["stage", "date_from", "date_to"]
     ws.append(headers)
     for s in STAGES:
         ws.append(
@@ -97,16 +99,14 @@ def build_workbook() -> Workbook:
                 s["stage"],
                 s["date_from"].isoformat(),
                 s["date_to"].isoformat(),
-                s["zone"],
             ]
         )
     for cell in ws[1]:
         cell.font = Font(bold=True)
         cell.fill = PatternFill("solid", fgColor="D9E8FB")
-    ws.column_dimensions["A"].width = 16
+    ws.column_dimensions["A"].width = 22
     ws.column_dimensions["B"].width = 14
     ws.column_dimensions["C"].width = 14
-    ws.column_dimensions["D"].width = 28
 
     # ── Лист 2: таймлапс кадров каждые 10 дней ──
     ws2 = wb.create_sheet("timelapse_photos")

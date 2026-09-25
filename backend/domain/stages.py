@@ -1,53 +1,69 @@
-"""Методика «этап СМР → необходимая техника» (ТЗ ДГП Москвы)."""
+"""Методика «этап СМР → необходимая техника».
+
+Этап по кадру определяется маркерами. Если на снимке машины разных этапов,
+берётся более узкий сигнал: фундамент, благоустройство, каркас, котлован, расчистка.
+Автокран и кран-манипулятор этап сами не открывают.
+"""
 
 from __future__ import annotations
 
 from typing import Dict, List, Set
 
 STAGE_LABELS_RU: Dict[str, str] = {
-    "earthworks": "Земляные работы / котлован",
-    "piling": "Свайный фундамент",
-    "monolith": "Монолитные работы",
-    "superstructure": "Надземная часть / монтаж",
+    "clearing": "Расчистка участка",
+    "excavation": "Откопка котлована",
+    "foundations": "Устройство фундаментов",
+    "frame": "Монтаж каркаса, стены и перекрытия",
+    "landscaping": "Благоустройство",
 }
 
-# Маркеры: достаточно одного из списка, чтобы считать этап «идущим»
+# Хронология для планов и сводок, не порядок выбора факта по кадру.
+STAGE_PRIORITY: List[str] = [
+    "clearing",
+    "excavation",
+    "foundations",
+    "frame",
+    "landscaping",
+]
+
+# Маркеры: достаточно одного из списка, чтобы считать этап идущим.
 STAGE_MARKERS: Dict[str, Set[str]] = {
-    "earthworks": {"excavator", "bulldozer"},
-    "piling": {"pile_driver"},
-    "monolith": {"concrete_mixer", "concrete_pump"},
-    "superstructure": {"tower_crane", "autocrane", "crane_manipulator"},
+    "clearing": {"bulldozer", "loader"},
+    "excavation": {"excavator"},
+    "foundations": {"pile_driver"},
+    "frame": {"tower_crane", "concrete_mixer", "concrete_pump"},
+    "landscaping": {"roller"},
 }
 
-# Звено: для incomplete_link (все группы должны быть представлены)
-# Группа = set альтернатив (OR внутри, AND между группами)
+# Звено: все группы должны быть представлены (OR внутри группы).
 STAGE_LINKS: Dict[str, List[Set[str]]] = {
-    "earthworks": [
-        {"dump_truck", "truck"},  # вывоз
+    "clearing": [
+        {"dump_truck", "truck"},
     ],
-    "piling": [
-        {"autocrane", "crane_manipulator"},  # мягкое звено
+    "excavation": [
+        {"dump_truck", "truck"},
     ],
-    "monolith": [
+    "foundations": [
+        {"autocrane", "crane_manipulator"},
+    ],
+    # Для каркаса звено бетона включается, только если на кадре уже есть миксер или насос.
+    "frame": [
         {"concrete_mixer"},
         {"concrete_pump"},
     ],
-    "superstructure": [],
+    "landscaping": [],
 }
 
-# Опционально ожидаемые (не блокируют, но могут усиливать предупреждение)
 STAGE_OPTIONAL: Dict[str, Set[str]] = {
-    "earthworks": {"loader", "roller"},
-    "piling": set(),
-    "monolith": set(),
-    "superstructure": set(),
+    "clearing": set(),
+    "excavation": set(),
+    "foundations": set(),
+    "frame": set(),
+    "landscaping": {"loader"},
 }
 
-# Приоритет при нескольких сигналах на кадре
-STAGE_PRIORITY: List[str] = ["piling", "monolith", "earthworks", "superstructure"]
-
-# Классы, которые сами по себе не открывают этап
-SUPPORT_ONLY: Set[str] = {"loader", "dump_truck", "truck", "roller"}
+# Сами этап не открывают.
+SUPPORT_ONLY: Set[str] = {"dump_truck", "truck", "autocrane", "crane_manipulator"}
 
 
 def stages_catalog() -> List[Dict[str, object]]:

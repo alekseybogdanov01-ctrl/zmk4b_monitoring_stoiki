@@ -1,0 +1,27 @@
+.git
+.gitignore
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+
+# Фронтенд собирается своим Dockerfile из контекста ./frontend
+frontend
+
+# Рантайм-данные и датасеты монтируются или не нужны в образе
+data/photos
+data/store.json
+data/output
+data/train_12
+ml/runs
+ml/datasets
+*.pt
+*.zip
+
+# Материалы для жюри в образе не нужны
+docs
+тз
+*.pdf
+*.pptx
+canvases

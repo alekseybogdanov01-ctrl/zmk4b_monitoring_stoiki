@@ -35,7 +35,7 @@ export default function PhotoPage({ photoId }) {
           <h1>{photo.filename}</h1>
           <p className="subtitle mono">дата съёмки: {photo.captured_at}</p>
         </div>
-        <StatusBadge status={day?.plan_status} />
+        <StatusBadge status={day?.project_status || day?.plan_status} />
       </header>
 
       <div className="layout">

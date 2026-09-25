@@ -2,23 +2,39 @@
 
 from __future__ import annotations
 
+import io
 import logging
+import re
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from backend.domain.rules import analyze_day, build_timeline, aggregate_counts
-from backend.domain.stages import STAGE_LABELS_RU, stages_catalog
-from backend.domain.status import site_status_from_timeline, statuses_catalog
+from backend.domain.stages import STAGE_LABELS_RU, STAGE_PRIORITY, stages_catalog
+from backend.domain.status import (
+    STATUS_META,
+    STATUS_PRIORITY,
+    site_status_from_timeline,
+    statuses_catalog,
+)
 from backend.plan_parse import parse_plan_bytes
+from backend.nspd import NspdError, NspdNotFound, lookup_parcel
 from backend import store
 from ml.classes import CLASS_COLORS, CLASS_LABELS_RU, CLASS_MAPPING, CONFIDENCE_BY_CLASS
-from ml.infer import classes_catalog, detect_bytes, load_model, resolve_weights
+from ml.infer import (
+    classes_catalog,
+    detect_bytes,
+    is_fallback_weights,
+    load_model,
+    model_class_coverage,
+    resolve_weights,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,6 +44,8 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 MAX_UPLOAD_MB = 25
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEMO_PACK_DIR = PROJECT_ROOT / "Демо_конкурс"
 
 app = FastAPI(
     title="Build Watch",
@@ -70,6 +88,7 @@ class DetectResponse(BaseModel):
     counts: Dict[str, int]
     stats_before_filter: Dict[str, int]
     stats_after_filter: Dict[str, int]
+    inference_ms: float
 
 
 class HealthResponse(BaseModel):
@@ -77,13 +96,16 @@ class HealthResponse(BaseModel):
     model: str
     model_ready: bool
     classes: int
+    weights_ok: bool
+    covered_classes: int
 
 
 class SiteIn(BaseModel):
-    name: str
-    lat: float = 55.7558
-    lng: float = 37.6173
+    name: Optional[str] = None
+    lat: float
+    lng: float
     address: Optional[str] = None
+    cadastral_number: str
 
 
 def _detections_out(raw_dets: List[Dict[str, Any]]) -> List[DetectionOut]:
@@ -103,7 +125,9 @@ def _detections_out(raw_dets: List[Dict[str, Any]]) -> List[DetectionOut]:
 
 
 def _run_detect(raw: bytes) -> Dict[str, Any]:
+    started = time.perf_counter()
     result = detect_bytes(raw)
+    result["inference_ms"] = round((time.perf_counter() - started) * 1000, 1)
     counts: Dict[str, int] = {}
     for det in result["detections"]:
         code = det["class"]
@@ -127,6 +151,7 @@ def _warmup() -> None:
         from backend.seed import ensure_seed
 
         ensure_seed()
+        store.ensure_object_numbers()
     except Exception:
         logger.exception("Seed skipped")
 
@@ -135,16 +160,30 @@ def _warmup() -> None:
 def health() -> HealthResponse:
     path = resolve_weights()
     ready = False
+    covered = 0
     try:
         model = load_model()
         ready = model is not None
+        covered = model_class_coverage(model)
     except Exception:
         ready = False
+
+    total = len(CLASS_MAPPING)
+    weights_ok = ready and not is_fallback_weights(path)
+    if not ready:
+        status = "error"
+    elif weights_ok and covered == total:
+        status = "ok"
+    else:
+        status = "degraded"
+
     return HealthResponse(
-        status="ok" if ready else "degraded",
+        status=status,
         model=path,
         model_ready=ready,
-        classes=len(CLASS_MAPPING),
+        classes=total,
+        weights_ok=weights_ok,
+        covered_classes=covered,
     )
 
 
@@ -201,10 +240,22 @@ async def detect(file: UploadFile = File(...)) -> DetectResponse:
         counts=result["counts"],
         stats_before_filter=result["stats_before_filter"],
         stats_after_filter=result["stats_after_filter"],
+        inference_ms=result["inference_ms"],
     )
 
 
 # ── Sites ──────────────────────────────────────────────────────────
+
+_COLOR_NOTE = re.compile(
+    r"\s*\((?:красн\w*|жёлт\w*|желт\w*|зелён\w*|зелен\w*|син\w*|сер\w*)\)",
+    re.IGNORECASE,
+)
+
+
+def _plain_text(text: Optional[str]) -> str:
+    """Убирает пометки цвета вроде «(синий)» из текстов для интерфейса."""
+    return _COLOR_NOTE.sub("", text or "")
+
 
 _SEED_ORDER = [
     "jk-idle-1",
@@ -220,6 +271,25 @@ _SEED_ORDER = [
 ]
 
 
+def _site_status_payload(
+    site: Dict[str, Any],
+    timeline: List[Dict[str, Any]],
+    photos: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Статус объекта; для сид-объектов без съёмки берём заданный сценарием."""
+    if not photos and site.get("seed_status"):
+        code = site["seed_status"]
+        meta = STATUS_META[code]
+        return {
+            "status": code,
+            "label": meta["label"],
+            "color": meta["color"],
+            "description": meta["description"],
+            "last_date": None,
+        }
+    return site_status_from_timeline(timeline)
+
+
 @app.get("/api/sites")
 def api_list_sites() -> Dict[str, Any]:
     """Единый список ЖК для карты и таблицы (одни и те же объекты)."""
@@ -228,19 +298,7 @@ def api_list_sites() -> Dict[str, Any]:
     for s in sites:
         photos = store.list_photos(s["id"])
         timeline = build_timeline(plan_rows=s.get("plan") or [], photos=photos)
-        status_payload = site_status_from_timeline(timeline)
-        if not photos and s.get("seed_status"):
-            from backend.domain.status import STATUS_META
-
-            code = s["seed_status"]
-            meta = STATUS_META[code]
-            status_payload = {
-                "status": code,
-                "label": meta["label"],
-                "color": meta["color"],
-                "description": meta["description"],
-                "last_date": None,
-            }
+        status_payload = _site_status_payload(s, timeline, photos)
 
         comment = s.get("comment") or ""
         if not comment:
@@ -263,7 +321,7 @@ def api_list_sites() -> Dict[str, Any]:
                 "last_status_description": status_payload.get("description"),
                 "last_date": status_payload.get("last_date"),
                 "project_status": status_payload,
-                "comment": comment,
+                "comment": _plain_text(comment),
                 "thumb_url": thumb,
             }
         )
@@ -273,19 +331,265 @@ def api_list_sites() -> Dict[str, Any]:
     return {"sites": enriched, "statuses": statuses_catalog()}
 
 
+ATTENTION_STATUSES = ("idle", "warning")
+
+DEVIATION_LABELS = {
+    "missing_required": "Нет необходимой техники",
+    "incomplete_link": "Неполное звено",
+    "unexpected_equipment": "Техника не под этап",
+}
+
+
+@app.get("/api/dashboard")
+def api_dashboard() -> Dict[str, Any]:
+    """Сводка по всем объектам города: что требует внимания в первую очередь."""
+    rows: List[Dict[str, Any]] = []
+    status_counts: Dict[str, int] = {code: 0 for code in STATUS_PRIORITY}
+    deviation_counts: Dict[str, int] = {}
+    stage_counts: Dict[str, Dict[str, int]] = {}
+    equipment_counts: Dict[str, int] = {}
+    total_photos = 0
+
+    for site in store.list_sites():
+        photos = store.list_photos(site["id"])
+        for photo in photos:
+            for det in photo.get("detections") or []:
+                code = det.get("class")
+                if code:
+                    equipment_counts[code] = equipment_counts.get(code, 0) + 1
+        plan = site.get("plan") or []
+        timeline = build_timeline(plan_rows=plan, photos=photos)
+        payload = _site_status_payload(site, timeline, photos)
+        total_photos += len(photos)
+
+        days_with_photos = [d for d in timeline if d.get("photo_ids")]
+        last_day = days_with_photos[-1] if days_with_photos else None
+
+        site_deviations: List[Dict[str, Any]] = []
+        for day in timeline:
+            for dev in day.get("deviations") or []:
+                site_deviations.append({**dev, "date": day["date"]})
+                deviation_counts[dev["type"]] = deviation_counts.get(dev["type"], 0) + 1
+
+        status = payload["status"]
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+        reference_day = last_day or (timeline[-1] if timeline else None)
+        planned_now = [
+            p["stage_code"] for p in (reference_day or {}).get("planned_stages") or []
+        ]
+        for code in planned_now:
+            bucket = stage_counts.setdefault(code, {"planned": 0, "confirmed": 0})
+            bucket["planned"] += 1
+            if last_day and last_day.get("primary_stage") == code:
+                bucket["confirmed"] += 1
+
+        rows.append(
+            {
+                "id": site["id"],
+                "object_no": site.get("object_no"),
+                "name": site["name"],
+                "address": site.get("address"),
+                "cadastral_number": site.get("cadastral_number"),
+                "lat": site.get("lat"),
+                "lng": site.get("lng"),
+                "status": status,
+                "status_label": payload["label"],
+                "status_color": payload["color"],
+                "status_description": payload.get("description"),
+                "last_date": payload.get("last_date"),
+                "photos_count": len(photos),
+                "last_photo_id": photos[-1]["id"] if photos else None,
+                "thumb_url": (
+                    f"/api/photos/{photos[-1]['id']}/file" if photos else None
+                ),
+                "comment": _plain_text(site.get("comment") or ""),
+                "planned_stages": [
+                    {"code": c, "label": STAGE_LABELS_RU.get(c, c)} for c in planned_now
+                ],
+                "fact_stage": (last_day or {}).get("primary_stage"),
+                "fact_stage_label": (last_day or {}).get("primary_stage_label"),
+                "deviations_count": len(site_deviations),
+                "top_deviation": site_deviations[-1] if site_deviations else None,
+            }
+        )
+
+    order = {sid: i for i, sid in enumerate(_SEED_ORDER)}
+    rows.sort(key=lambda r: order.get(r["id"], 999))
+
+    def severity_rank(row: Dict[str, Any]) -> int:
+        code = row["status"]
+        return STATUS_PRIORITY.index(code) if code in STATUS_PRIORITY else 99
+
+    attention = sorted(
+        (r for r in rows if r["status"] in ATTENTION_STATUSES),
+        key=lambda r: (severity_rank(r), -r["deviations_count"], r["name"]),
+    )
+
+    stage_order = {code: i for i, code in enumerate(STAGE_PRIORITY)}
+
+    return {
+        "totals": {
+            "sites": len(rows),
+            "attention": len(attention),
+            "with_data": sum(1 for r in rows if r["photos_count"]),
+            "without_data": sum(1 for r in rows if not r["photos_count"]),
+            "photos": total_photos,
+            "deviations": sum(deviation_counts.values()),
+            "ok": status_counts.get("ok", 0),
+            "equipment": sum(equipment_counts.values()),
+        },
+        "by_status": [
+            {"code": code, **STATUS_META[code], "count": status_counts.get(code, 0)}
+            for code in STATUS_PRIORITY
+        ],
+        "by_deviation": [
+            {"type": t, "label": DEVIATION_LABELS.get(t, t), "count": n}
+            for t, n in sorted(deviation_counts.items(), key=lambda kv: -kv[1])
+        ],
+        "by_equipment": [
+            {
+                "code": code,
+                "label": CLASS_LABELS_RU.get(code, code),
+                "color": CLASS_COLORS.get(code, "#6C757D"),
+                "count": n,
+            }
+            for code, n in sorted(equipment_counts.items(), key=lambda kv: -kv[1])
+        ],
+        "by_stage": [
+            {
+                "code": code,
+                "label": STAGE_LABELS_RU.get(code, code),
+                "planned": data["planned"],
+                "confirmed": data["confirmed"],
+            }
+            for code, data in sorted(
+                stage_counts.items(), key=lambda kv: stage_order.get(kv[0], 99)
+            )
+        ],
+        "attention": attention,
+        "sites": rows,
+    }
+
+
+def _same_cadastral(left: str, right: str) -> bool:
+    def compact(value: str) -> str:
+        return "".join(ch for ch in value.lower() if ch.isalnum())
+
+    a, b = compact(left), compact(right)
+    return bool(a) and a == b
+
+
+@app.get("/api/sites/export")
+def api_export_sites() -> Response:
+    """Все стройки портфеля в Excel, независимо от фильтра на экране."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    rows = api_dashboard()["sites"]
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Объекты"
+    headers = [
+        "ИД",
+        "Название",
+        "Адрес",
+        "Кадастровый номер",
+        "Статус",
+        "План",
+        "Факт",
+        "Дата съёмки",
+        "Снимков",
+        "Отклонений",
+        "Широта",
+        "Долгота",
+    ]
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="1F4E79")
+        cell.alignment = Alignment(vertical="center")
+    for site in rows:
+        plan = ", ".join(p["label"] for p in (site.get("planned_stages") or [])) or "—"
+        ws.append(
+            [
+                site.get("object_no") or "",
+                site.get("name") or "",
+                site.get("address") or "",
+                site.get("cadastral_number") or "",
+                site.get("status_label") or "",
+                plan,
+                site.get("fact_stage_label") or "—",
+                site.get("last_date") or "",
+                site.get("photos_count") or 0,
+                site.get("deviations_count") or 0,
+                site.get("lat"),
+                site.get("lng"),
+            ]
+        )
+    for column, width in {
+        "A": 8,
+        "B": 28,
+        "C": 28,
+        "D": 24,
+        "E": 24,
+        "F": 36,
+        "G": 36,
+        "H": 14,
+        "I": 12,
+        "J": 14,
+        "K": 12,
+        "L": 12,
+    }.items():
+        ws.column_dimensions[column].width = width
+    ws.auto_filter.ref = ws.dimensions
+    ws.freeze_panes = "A2"
+    buf = io.BytesIO()
+    wb.save(buf)
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": "attachment; filename=sites.xlsx",
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@app.get("/api/nspd/parcel")
+def api_nspd_parcel(cadastral: str) -> Dict[str, Any]:
+    """Адрес и центр участка из НСПД по кадастровому номеру."""
+    try:
+        return lookup_parcel(cadastral)
+    except NspdNotFound as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except NspdError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
 @app.post("/api/sites")
 def api_create_site(body: SiteIn) -> Dict[str, Any]:
-    site = store.upsert_site(
+    cadastral = (body.cadastral_number or "").strip()
+    if not cadastral:
+        raise HTTPException(400, "Укажите кадастровый номер земельного участка")
+    address = (body.address or "").strip() or None
+    for existing in store.list_sites():
+        current = (existing.get("cadastral_number") or "").strip()
+        if current and _same_cadastral(current, cadastral):
+            raise HTTPException(
+                409,
+                f"Участок {cadastral} уже есть у «{existing.get('name')}»",
+            )
+    return store.insert_site(
         {
-            "id": str(uuid.uuid4()),
-            "name": body.name,
+            "name": (body.name or "").strip(),
             "lat": body.lat,
             "lng": body.lng,
-            "address": body.address,
+            "address": address,
+            "cadastral_number": cadastral,
             "plan": [],
         }
     )
-    return site
 
 
 @app.get("/api/sites/{site_id}")
@@ -295,19 +599,7 @@ def api_get_site(site_id: str) -> Dict[str, Any]:
         raise HTTPException(404, "Объект не найден")
     photos = store.list_photos(site_id)
     timeline = build_timeline(plan_rows=site.get("plan") or [], photos=photos)
-    status_payload = site_status_from_timeline(timeline)
-    if not photos and site.get("seed_status"):
-        from backend.domain.status import STATUS_META
-
-        code = site["seed_status"]
-        meta = STATUS_META[code]
-        status_payload = {
-            "status": code,
-            "label": meta["label"],
-            "color": meta["color"],
-            "description": meta["description"],
-            "last_date": None,
-        }
+    status_payload = _site_status_payload(site, timeline, photos)
     return {
         **site,
         "photos_count": len(photos),
@@ -317,12 +609,12 @@ def api_get_site(site_id: str) -> Dict[str, Any]:
                 "captured_at": p["captured_at"],
                 "filename": p["filename"],
                 "file_url": f"/api/photos/{p['id']}/file",
-                "comment": p.get("comment"),
+                "comment": _plain_text(p.get("comment")),
             }
             for p in photos
         ],
         "project_status": status_payload,
-        "comment": site.get("comment"),
+        "comment": _plain_text(site.get("comment")),
     }
 
 @app.post("/api/sites/{site_id}/plan")
@@ -482,6 +774,97 @@ def api_photo_file(photo_id: str) -> FileResponse:
     return FileResponse(path)
 
 
+# ── Шаблон календарного плана ──
+
+
+@app.get("/api/plan/template")
+def api_plan_template() -> Response:
+    """Excel-шаблон плана: этап, начало, конец."""
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "План"
+    ws.append(["stage", "date_from", "date_to"])
+    ws.append(["расчистка участка", "2025-02-01", "2025-02-20"])
+    ws.append(["откопка котлована", "2025-03-01", "2025-03-20"])
+    ws.append(["устройство фундаментов", "2025-03-18", "2025-04-05"])
+    ws.append(["монтаж каркаса", "2025-04-01", "2025-04-25"])
+    ws.append(["благоустройство", "2025-04-20", "2025-05-15"])
+    for column, width in {"A": 28, "B": 14, "C": 14}.items():
+        ws.column_dimensions[column].width = width
+    buf = io.BytesIO()
+    wb.save(buf)
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="plan_template.xlsx"'},
+    )
+
+
+# ── Готовый пакет из папки Демо_конкурс ──
+
+
+def _demo_plan_path() -> Path:
+    for name in ("календарный_план.xlsx", "календарный_план.csv"):
+        path = DEMO_PACK_DIR / "план" / name
+        if path.is_file():
+            return path
+    raise HTTPException(
+        404,
+        "Демо-пакет не найден. Соберите его: python scripts/pack_demo_contest.py",
+    )
+
+
+def _demo_shot_paths() -> List[Path]:
+    folder = DEMO_PACK_DIR / "снимки"
+    if not folder.is_dir():
+        raise HTTPException(404, "В демо-пакете нет папки «снимки»")
+    shots = sorted(
+        p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in ALLOWED_EXT
+    )
+    if not shots:
+        raise HTTPException(404, "В демо-пакете нет снимков")
+    return shots
+
+
+@app.get("/api/demo/pack")
+def api_demo_pack() -> Dict[str, Any]:
+    """Описание готового пакета: фронт подставляет файлы в форму вкладки «Демо»."""
+    plan = _demo_plan_path()
+    shots = _demo_shot_paths()
+    return {
+        "site_name": "ЖК «Демо-конкурс»",
+        "base_date": "2025-01-10",
+        "step_days": 10,
+        "plan": {"name": plan.name, "url": "/api/demo/pack/plan"},
+        "photos": [
+            {"name": p.name, "url": f"/api/demo/pack/photo/{i}"}
+            for i, p in enumerate(shots)
+        ],
+    }
+
+
+@app.get("/api/demo/pack/plan")
+def api_demo_pack_plan() -> FileResponse:
+    path = _demo_plan_path()
+    media = (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        if path.suffix.lower() == ".xlsx"
+        else "text/csv"
+    )
+    return FileResponse(path, media_type=media, filename=path.name)
+
+
+@app.get("/api/demo/pack/photo/{index}")
+def api_demo_pack_photo(index: int) -> FileResponse:
+    shots = _demo_shot_paths()
+    if index < 0 or index >= len(shots):
+        raise HTTPException(404, "Снимок не найден")
+    path = shots[index]
+    return FileResponse(path, media_type="image/jpeg", filename=path.name)
+
+
 # ── Demo one-shot (ТЗ: загрузка плана + снимков → вся логика) ──
 
 
@@ -501,6 +884,7 @@ async def api_demo_analyze(
     """
     import json as _json
 
+    request_started = time.perf_counter()
     plan_raw = await plan_file.read()
     if not plan_raw:
         raise HTTPException(400, "Пустой файл плана")
@@ -536,6 +920,7 @@ async def api_demo_analyze(
 
     uploaded: List[Dict[str, Any]] = []
     errors: List[str] = []
+    inference_times: List[float] = []
 
     for file, captured_at in zip(photos, date_list):
         filename = file.filename or "frame.jpg"
@@ -559,6 +944,7 @@ async def api_demo_analyze(
                 height=result["height"],
                 model=result["model"],
             )
+            inference_times.append(result["inference_ms"])
             uploaded.append(
                 {
                     "id": photo["id"],
@@ -566,6 +952,7 @@ async def api_demo_analyze(
                     "filename": filename,
                     "counts": result["counts"],
                     "detections_count": len(result["detections"]),
+                    "inference_ms": result["inference_ms"],
                 }
             )
         except Exception as exc:
@@ -573,7 +960,9 @@ async def api_demo_analyze(
             errors.append(f"{filename}: {exc}")
 
     all_photos = store.list_photos(site["id"])
+    matching_started = time.perf_counter()
     timeline = build_timeline(plan_rows=plan, photos=all_photos)
+    matching_ms = round((time.perf_counter() - matching_started) * 1000, 1)
 
     # сводка отклонений
     deviations_flat: List[Dict[str, Any]] = []
@@ -598,4 +987,16 @@ async def api_demo_analyze(
         "deviations": deviations_flat,
         "errors": errors,
         "methodology": stages_catalog(),
+        "performance": {
+            "photos": len(inference_times),
+            "detect_total_ms": round(sum(inference_times), 1),
+            "detect_avg_ms": (
+                round(sum(inference_times) / len(inference_times), 1)
+                if inference_times
+                else None
+            ),
+            "detect_max_ms": round(max(inference_times), 1) if inference_times else None,
+            "matching_ms": matching_ms,
+            "total_ms": round((time.perf_counter() - request_started) * 1000, 1),
+        },
     }

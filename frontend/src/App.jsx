@@ -1,10 +1,30 @@
 import { useEffect, useState } from "react";
-import { fetchHealth } from "./api.js";
 import DemoPage from "./pages/DemoPage.jsx";
-import MapPage from "./pages/MapPage.jsx";
 import SitePage from "./pages/SitePage.jsx";
 import PhotoPage from "./pages/PhotoPage.jsx";
 import DetectPage from "./pages/DetectPage.jsx";
+import VersionKPage from "./pages/VersionKPage.jsx";
+import DashboardPage from "./pages/DashboardPage.jsx";
+
+const THEME_KEY = "bw-theme";
+
+function readTheme() {
+  const current = document.documentElement.dataset.theme;
+  return current === "light" ? "light" : "dark";
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const color = document.querySelector('meta[name="theme-color"]');
+  if (color) color.setAttribute("content", theme === "light" ? "#f3f6fb" : "#0b0f16");
+  const scheme = document.querySelector('meta[name="color-scheme"]');
+  if (scheme) scheme.setAttribute("content", theme);
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch {
+    /* приватный режим */
+  }
+}
 
 function parseHash() {
   const raw = (window.location.hash || "#/demo").replace(/^#/, "") || "/demo";
@@ -15,7 +35,12 @@ function parseHash() {
 
 export default function App() {
   const [route, setRoute] = useState(parseHash);
-  const [health, setHealth] = useState(null);
+  const [theme, setTheme] = useState(readTheme);
+
+  const chooseTheme = (next) => {
+    setTheme(next);
+    applyTheme(next);
+  };
 
   useEffect(() => {
     const onHash = () => setRoute(parseHash());
@@ -23,47 +48,61 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  useEffect(() => {
-    fetchHealth()
-      .then(setHealth)
-      .catch((e) => setHealth({ status: "error", model_ready: false, model: e.message }));
-  }, []);
-
-  const healthClass = health?.model_ready ? "ok" : health ? "bad" : "";
-
   let body;
-  if (route.page === "map") body = <MapPage />;
+  // Карта переехала на дашборд, но старые ссылки #/map ещё живут в закладках.
+  if (route.page === "dashboard" || route.page === "map") body = <DashboardPage />;
   else if (route.page === "detect") body = <DetectPage />;
+  else if (route.page === "version-k") body = <VersionKPage />;
   else if (route.page === "site" && route.id) body = <SitePage siteId={route.id} />;
   else if (route.page === "photo" && route.id) body = <PhotoPage photoId={route.id} />;
   else body = <DemoPage />;
 
   return (
-    <div className="app">
-      <nav className="topnav">
-        <a className="brand" href="#/demo">
-          Build <span>Watch</span>
-        </a>
-        <div className="nav-links">
-          <a href="#/demo" className={route.page === "demo" ? "active" : ""}>
-            Демо
+    <>
+      <header className="appbar">
+        <nav className="topnav">
+          <a className="brand" href="#/demo">
+            <img className="brand-mark" src="/radar.png" alt="" />
+            Строй<span>Радар</span>
           </a>
-          <a href="#/map" className={route.page === "map" ? "active" : ""}>
-            Карта
-          </a>
-          <a href="#/detect" className={route.page === "detect" ? "active" : ""}>
-            Тест модели
-          </a>
-        </div>
-        <div className={`health ${healthClass}`}>
-          {health?.model_ready
-            ? `model ready · ${health.classes} cls`
-            : health
-              ? `model: ${health.status}`
-              : "connecting…"}
-        </div>
-      </nav>
-      {body}
-    </div>
+          <div className="nav-links">
+            <a
+              href="#/dashboard"
+              className={
+                route.page === "dashboard" || route.page === "map" ? "active" : ""
+              }
+            >
+              Дашборд
+            </a>
+            <a href="#/demo" className={route.page === "demo" ? "active" : ""}>
+              Демо
+            </a>
+            <a href="#/detect" className={route.page === "detect" ? "active" : ""}>
+              Тест модели
+            </a>
+            <a href="#/version-k" className={route.page === "version-k" ? "active" : ""}>
+              О продукте
+            </a>
+          </div>
+          <div className="theme-switch" role="group" aria-label="Тема оформления">
+            <button
+              type="button"
+              aria-pressed={theme === "dark"}
+              onClick={() => chooseTheme("dark")}
+            >
+              Тёмная
+            </button>
+            <button
+              type="button"
+              aria-pressed={theme === "light"}
+              onClick={() => chooseTheme("light")}
+            >
+              Светлая
+            </button>
+          </div>
+        </nav>
+      </header>
+      <main className="app">{body}</main>
+    </>
   );
 }

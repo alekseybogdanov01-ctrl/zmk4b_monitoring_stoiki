@@ -1,0 +1,26 @@
+services:
+  backend:
+    build: .
+    container_name: build-watch-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # Веса и рантайм-данные живут на хосте, а не в образе
+      - ./ml/weights:/app/ml/weights
+      - ./data:/app/data
+    environment:
+      - PYTHONPATH=/app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  frontend:
+    build: ./frontend
+    container_name: build-watch-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
